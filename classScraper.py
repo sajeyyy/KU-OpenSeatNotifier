@@ -5,25 +5,9 @@ from email.mime.text import MIMEText
 import logging
 import time
 
-openClass = False;
-
-# KU's Class Search API URL
-apiURL = "https://classes.ku.edu/Classes/CourseSearch.action"
-
-# POST Request Payload (NEEDS TO BE ADJUSTABLE)
-payload = {
-    "classesSearchText": "EECS 443",
-    "searchCareer": "UndergraduateGraduate",
-    "searchTerm": "4252",  # Spring 2025 term
-    "searchClosed": "false",
-    "searchCourseNumberMin": "001",
-    "searchCourseNumberMax": "999",
-    "searchIncludeExcludeDays": "include",
-}
-
 
 # Encryption key management
-def get_or_create_key():
+def getKey():
     key_file = "key.key"
     if os.path.exists(key_file):
         with open(key_file, "rb") as keyfile:
@@ -32,6 +16,29 @@ def get_or_create_key():
     with open(key_file, "wb") as keyfile:
         keyfile.write(key)
     return key
+
+
+def loadUserData():
+    key = getKey()
+    f = Fernet(key)
+    with open("userData.enc", "rb") as file:
+        encrypted_data = file.read()
+    return json.loads(f.decrypt(encrypted_data).decode())
+
+
+def calculate_search_term():
+    baseYear = 2024
+    baseTerm = 4246
+    currentYear = datetime.now().year
+    currentMonth = datetime.now().month
+    termOffset = (currentYear - baseYear) * 3
+    if currentMonth <= 4:
+        termOffset += 2
+    elif currentMonth <= 7:
+        termOffset += 0
+    else:
+        termOffset += 1
+    return baseTerm + termOffset
 
 
 def checkClass():
@@ -64,6 +71,7 @@ def checkClass():
         print(f"Error parsing enrollment data: {e}")
 
 
+
 def sendEmail():
     subject = "Class Seat Available!"
     class_name = payload["classesSearchText"]  # Get the class name from the payload
@@ -79,14 +87,24 @@ def sendEmail():
         server.sendmail(email, TO_email, msg.as_string())
         print("Notification email sent!")
 
-if __name__ == "__main__":
-    while not openClass:
-        checkClass()  # Check number of open seats
-        print("Checked. Waiting for 7 minutes...")
-        time.sleep(7 * 60)  # Sleep for 7 minutes (7 * 60 seconds)
 
-        if openClass == True:
-            break
 
-logging.basicConfig(filename="class_scraper.log", level=logging.INFO)
-logging.info(f"Checked at {datetime.now()}: {[(90, 90)]}")
+# Main program
+userData = loadUserData()
+payload = {
+    "classesSearchText": userData["classesSearchText"],
+    "searchCareer": "UndergraduateGraduate",
+    "searchTerm": str(calculate_search_term()),
+    "searchClosed": "false",
+    "searchCourseNumberMin": "001",
+    "searchCourseNumberMax": "999",
+    "searchIncludeExcludeDays": "include",
+}
+
+openClass = False
+while not openClass:
+    checkClass()
+    if openClass:
+        break
+    print("Checked. Waiting for 7 minutes...")
+    time.sleep(7 * 60)
